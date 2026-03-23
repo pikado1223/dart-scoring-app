@@ -3,174 +3,177 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dart Pro Scorer</title>
+<title>Dart Pro Online</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <style>
 body { font-family: Arial; text-align:center; background:#0f172a; color:#fff; }
-h1 { margin:20px; }
-.players { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; }
-.player { background:#1e293b; padding:20px; border-radius:20px; width:220px; }
+.score { font-size:60px; }
+.player { margin:10px; padding:15px; background:#1e293b; border-radius:15px; }
 .active { border:3px solid #22c55e; }
-.score { font-size:70px; font-weight:bold; }
-.small { font-size:14px; opacity:0.8; }
-.inputs { margin-top:20px; }
-input { width:70px; padding:10px; font-size:18px; margin:5px; text-align:center; border-radius:10px; border:none; }
-button { padding:10px; margin:4px; border:none; border-radius:10px; background:#22c55e; font-weight:bold; cursor:pointer; }
-.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:360px; margin:10px auto; }
+button { padding:10px; margin:5px; border-radius:10px; }
+.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:360px; margin:auto; }
 .keypad button { width:60px; }
 </style>
 </head>
 <body>
 
-<h1>🎯 Dart Pro Scorer</h1>
+<h1>🎯 Dart Pro Online</h1>
 
-<div id="players" class="players"></div>
-
-<div class="inputs">
-  <input id="d1" placeholder="D1">
-  <input id="d2" placeholder="D2">
-  <input id="d3" placeholder="D3">
-  <br/>
-  <button onclick="setMultiplier(1)">Single</button>
-  <button onclick="setMultiplier(2)">Double</button>
-  <button onclick="setMultiplier(3)">Triple</button>
-  <br/>
-  <label>Last dart double <input type="checkbox" id="doubleCheck"></label>
-  <br/>
-  <button onclick="submitTurn()">Submit</button>
-  <button onclick="undo()">Undo</button>
+<div>
+Room: <input id="roomId">
+<button onclick="joinRoom()">Join</button>
 </div>
 
-<div class="keypad" id="keypad"></div>
+<div id="game" style="display:none">
+  <h2 id="turn"></h2>
+  <div id="players"></div>
+
+  <div>
+    <input id="d1" placeholder="D1">
+    <input id="d2" placeholder="D2">
+    <input id="d3" placeholder="D3">
+  </div>
+
+  <div>
+    <button onclick="setMult(1)">S</button>
+    <button onclick="setMult(2)">D</button>
+    <button onclick="setMult(3)">T</button>
+  </div>
+
+  <label>Last dart double <input type="checkbox" id="doubleCheck"></label>
+
+  <div>
+    <button onclick="submitTurn()">Submit</button>
+    <button onclick="undo()">Undo</button>
+  </div>
+
+  <div class="keypad" id="keypad"></div>
+</div>
 
 <script>
-let players = [createPlayer(), createPlayer()];
-let currentPlayer = 0;
-let history = [];
+const firebaseConfig = {
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_APP.firebaseapp.com",
+  databaseURL: "https://YOUR_APP.firebaseio.com",
+  projectId: "YOUR_APP",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let roomRef;
 let multiplier = 1;
+let history = [];
 
-function createPlayer(){
-  return {score:501,darts:0,total:0,legs:0,sets:0};
-}
+function joinRoom(){
+  const room = document.getElementById('roomId').value;
+  roomRef = db.ref('rooms/' + room);
 
-function render(){
-  const container=document.getElementById('players');
-  container.innerHTML='';
-  players.forEach((p,i)=>{
-    let avg = p.darts ? ((p.total / p.darts) * 3).toFixed(2) : 0;
-    container.innerHTML+=`
-    <div class="player ${i===currentPlayer?'active':''}">
-      <h3>Player ${i+1}</h3>
-      <div class="score">${p.score}</div>
-      <div class="small">Legs: ${p.legs} | Sets: ${p.sets}</div>
-      <div class="small">3-dart Avg: ${avg}</div>
-    </div>`;
+  roomRef.on('value', snap => {
+    const data = snap.val();
+    if(!data) return;
+    document.getElementById('game').style.display='block';
+    render(data);
+  });
+
+  roomRef.once('value').then(snap=>{
+    if(!snap.exists()){
+      roomRef.set({
+        players:[createPlayer(),createPlayer()],
+        turn:0
+      });
+    }
   });
 }
 
-function setMultiplier(m){ multiplier = m; }
+function createPlayer(){
+  return {score:501,total:0,darts:0,legs:0,sets:0};
+}
 
-function fillInput(val){
-  val = val * multiplier;
-  multiplier = 1;
+function render(data){
+  document.getElementById('turn').innerText = 'Player ' + (data.turn+1);
 
-  if(!d1El.value) d1El.value=val;
-  else if(!d2El.value) d2El.value=val;
-  else d3El.value=val;
+  let html='';
+  data.players.forEach((p,i)=>{
+    let avg = p.darts ? ((p.total/p.darts)*3).toFixed(2) : 0;
+    html+=`<div class="player ${i===data.turn?'active':''}">
+      <h3>P${i+1}</h3>
+      <div class="score">${p.score}</div>
+      <div>Legs:${p.legs} Sets:${p.sets}</div>
+      <div>Avg:${avg}</div>
+    </div>`;
+  });
+  document.getElementById('players').innerHTML = html;
+}
+
+function setMult(m){ multiplier=m; }
+
+function fill(val){
+  val*=multiplier;
+  multiplier=1;
+  if(!d1.value) d1.value=val;
+  else if(!d2.value) d2.value=val;
+  else d3.value=val;
 }
 
 function submitTurn(){
-  let v1=+d1El.value||0;
-  let v2=+d2El.value||0;
-  let v3=+d3El.value||0;
+  const v1=+d1.value||0;
+  const v2=+d2.value||0;
+  const v3=+d3.value||0;
 
-  let total=v1+v2+v3;
-  let player=players[currentPlayer];
+  roomRef.transaction(data=>{
+    if(!data) return;
 
-  history.push(JSON.parse(JSON.stringify(players)));
+    let p=data.players[data.turn];
+    let total=v1+v2+v3;
+    let newScore=p.score-total;
 
-  let newScore=player.score-total;
-
-  if(newScore<0 || newScore===1){ next(); clearInputs(); return; }
-
-  if(newScore===0){
-    if(!doubleCheck.checked){ next(); clearInputs(); return; }
-
-    player.score=0;
-    player.legs++;
-    player.darts+=3;
-    player.total+=total;
-
-    if(player.legs>=3){
-      player.sets++;
-      player.legs=0;
-      alert(`Player ${currentPlayer+1} wins SET!`);
-    } else {
-      alert(`Player ${currentPlayer+1} wins LEG!`);
+    if(newScore<0 || newScore===1) {
+      data.turn=(data.turn+1)%2;
+      return data;
     }
 
-    resetLeg();
-    return;
-  }
+    if(newScore===0){
+      if(!doubleCheck.checked) return data;
 
-  player.score=newScore;
-  player.darts+=3;
-  player.total+=total;
+      p.legs++;
+      if(p.legs>=3){ p.sets++; p.legs=0; }
 
-  clearInputs();
-  next();
+      data.players.forEach(pl=>pl.score=501);
+      return data;
+    }
+
+    p.score=newScore;
+    p.total+=total;
+    p.darts+=3;
+
+    data.turn=(data.turn+1)%2;
+    return data;
+  });
+
+  d1.value=''; d2.value=''; d3.value='';
 }
 
-function resetLeg(){
-  players.forEach(p=>p.score=501);
-  clearInputs();
-  render();
-}
+function undo(){ alert('Undo not supported online yet'); }
 
-function undo(){
-  if(history.length>0){
-    players=history.pop();
-    currentPlayer=(currentPlayer-1+players.length)%players.length;
-    render();
-  }
-}
-
-function next(){
-  currentPlayer=(currentPlayer+1)%players.length;
-  render();
-}
-
-function clearInputs(){
-  d1El.value=''; d2El.value=''; d3El.value='';
-  doubleCheck.checked=false;
-}
-
-// keypad full 1-20 + bull
-const keypad=document.getElementById('keypad');
 for(let i=1;i<=20;i++){
-  let btn=document.createElement('button');
-  btn.innerText=i;
-  btn.onclick=()=>fillInput(i);
-  keypad.appendChild(btn);
+  let b=document.createElement('button');
+  b.innerText=i;
+  b.onclick=()=>fill(i);
+  keypad.appendChild(b);
 }
 
 [25,50].forEach(v=>{
-  let btn=document.createElement('button');
-  btn.innerText=v;
-  btn.onclick=()=>fillInput(v);
-  keypad.appendChild(btn);
+  let b=document.createElement('button');
+  b.innerText=v;
+  b.onclick=()=>fill(v);
+  keypad.appendChild(b);
 });
 
-const d1El=document.getElementById('d1');
-const d2El=document.getElementById('d2');
-const d3El=document.getElementById('d3');
-const doubleCheck=document.getElementById('doubleCheck');
-
-// enter support
-document.addEventListener('keydown',e=>{
+// enter
+window.addEventListener('keydown',e=>{
   if(e.key==='Enter') submitTurn();
 });
-
-render();
 </script>
 
 </body>
