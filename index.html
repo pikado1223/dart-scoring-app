@@ -13,9 +13,9 @@ h1 { margin:20px; }
 .score { font-size:70px; font-weight:bold; }
 .small { font-size:14px; opacity:0.8; }
 .inputs { margin-top:20px; }
-input { width:80px; padding:12px; font-size:20px; margin:5px; text-align:center; border-radius:10px; border:none; }
-button { padding:10px 14px; margin:5px; border:none; border-radius:10px; background:#22c55e; font-weight:bold; cursor:pointer; }
-.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:300px; margin:10px auto; }
+input { width:70px; padding:10px; font-size:18px; margin:5px; text-align:center; border-radius:10px; border:none; }
+button { padding:10px; margin:4px; border:none; border-radius:10px; background:#22c55e; font-weight:bold; cursor:pointer; }
+.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:360px; margin:10px auto; }
 .keypad button { width:60px; }
 </style>
 </head>
@@ -26,13 +26,17 @@ button { padding:10px 14px; margin:5px; border:none; border-radius:10px; backgro
 <div id="players" class="players"></div>
 
 <div class="inputs">
-  <input id="d1" placeholder="Dart 1">
-  <input id="d2" placeholder="Dart 2">
-  <input id="d3" placeholder="Dart 3">
+  <input id="d1" placeholder="D1">
+  <input id="d2" placeholder="D2">
+  <input id="d3" placeholder="D3">
   <br/>
-  <label>Last dart was double <input type="checkbox" id="doubleCheck"></label>
+  <button onclick="setMultiplier(1)">Single</button>
+  <button onclick="setMultiplier(2)">Double</button>
+  <button onclick="setMultiplier(3)">Triple</button>
   <br/>
-  <button onclick="submitTurn()">Submit (Enter)</button>
+  <label>Last dart double <input type="checkbox" id="doubleCheck"></label>
+  <br/>
+  <button onclick="submitTurn()">Submit</button>
   <button onclick="undo()">Undo</button>
 </div>
 
@@ -42,23 +46,36 @@ button { padding:10px 14px; margin:5px; border:none; border-radius:10px; backgro
 let players = [createPlayer(), createPlayer()];
 let currentPlayer = 0;
 let history = [];
+let multiplier = 1;
 
 function createPlayer(){
-  return {score:501,darts:0,legs:0,sets:0};
+  return {score:501,darts:0,total:0,legs:0,sets:0};
 }
 
 function render(){
   const container=document.getElementById('players');
   container.innerHTML='';
   players.forEach((p,i)=>{
+    let avg = p.darts ? ((p.total / p.darts) * 3).toFixed(2) : 0;
     container.innerHTML+=`
     <div class="player ${i===currentPlayer?'active':''}">
       <h3>Player ${i+1}</h3>
       <div class="score">${p.score}</div>
       <div class="small">Legs: ${p.legs} | Sets: ${p.sets}</div>
-      <div class="small">Avg: ${p.darts?((501-p.score)/p.darts).toFixed(2):0}</div>
+      <div class="small">3-dart Avg: ${avg}</div>
     </div>`;
   });
+}
+
+function setMultiplier(m){ multiplier = m; }
+
+function fillInput(val){
+  val = val * multiplier;
+  multiplier = 1;
+
+  if(!d1El.value) d1El.value=val;
+  else if(!d2El.value) d2El.value=val;
+  else d3El.value=val;
 }
 
 function submitTurn(){
@@ -81,6 +98,7 @@ function submitTurn(){
     player.score=0;
     player.legs++;
     player.darts+=3;
+    player.total+=total;
 
     if(player.legs>=3){
       player.sets++;
@@ -96,6 +114,7 @@ function submitTurn(){
 
   player.score=newScore;
   player.darts+=3;
+  player.total+=total;
 
   clearInputs();
   next();
@@ -125,27 +144,28 @@ function clearInputs(){
   doubleCheck.checked=false;
 }
 
-// keypad
+// keypad full 1-20 + bull
 const keypad=document.getElementById('keypad');
-[1,5,20,25,50,60].forEach(v=>{
+for(let i=1;i<=20;i++){
+  let btn=document.createElement('button');
+  btn.innerText=i;
+  btn.onclick=()=>fillInput(i);
+  keypad.appendChild(btn);
+}
+
+[25,50].forEach(v=>{
   let btn=document.createElement('button');
   btn.innerText=v;
   btn.onclick=()=>fillInput(v);
   keypad.appendChild(btn);
 });
 
-function fillInput(val){
-  if(!d1El.value) d1El.value=val;
-  else if(!d2El.value) d2El.value=val;
-  else d3El.value=val;
-}
-
-// enter
 const d1El=document.getElementById('d1');
 const d2El=document.getElementById('d2');
 const d3El=document.getElementById('d3');
 const doubleCheck=document.getElementById('doubleCheck');
 
+// enter support
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter') submitTurn();
 });
