@@ -1,166 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dart Pro Scorer</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      background: linear-gradient(135deg,#0f172a,#1e293b);
-      color: #fff;
-      margin:0;
-    }
-    h1 { margin: 20px; }
-    .players {
-      display:flex;
-      flex-wrap:wrap;
-      justify-content:center;
-      gap:20px;
-      padding:10px;
-    }
-    .player {
-      background:#1e293b;
-      padding:20px;
-      border-radius:20px;
-      width:220px;
-      box-shadow:0 10px 20px rgba(0,0,0,0.3);
-      transition:0.2s;
-    }
-    .active { border:3px solid #22c55e; transform:scale(1.05); }
-    .score {
-      font-size:60px;
-      font-weight:bold;
-      margin:10px 0;
-    }
-    .controls {
-      margin-top:20px;
-    }
-    input, select {
-      padding:12px;
-      margin:5px;
-      font-size:18px;
-      border-radius:10px;
-      border:none;
-      text-align:center;
-    }
-    button {
-      padding:12px 20px;
-      margin:5px;
-      cursor:pointer;
-      border-radius:10px;
-      border:none;
-      font-size:16px;
-      background:#22c55e;
-      color:#000;
-      font-weight:bold;
-    }
-    button:hover { opacity:0.9; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dart Pro Scorer</title>
+<style>
+body { font-family: Arial; text-align:center; background:#0f172a; color:#fff; }
+h1 { margin:20px; }
+.players { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; }
+.player { background:#1e293b; padding:20px; border-radius:20px; width:220px; }
+.active { border:3px solid #22c55e; }
+.score { font-size:70px; font-weight:bold; }
+.small { font-size:14px; opacity:0.8; }
+.inputs { margin-top:20px; }
+input { width:80px; padding:12px; font-size:20px; margin:5px; text-align:center; border-radius:10px; border:none; }
+button { padding:10px 14px; margin:5px; border:none; border-radius:10px; background:#22c55e; font-weight:bold; cursor:pointer; }
+.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:300px; margin:10px auto; }
+.keypad button { width:60px; }
+</style>
 </head>
 <body>
 
-<h1>🎯 Dart Pro Scorer (501 Double Out)</h1>
-
-<div>
-  Players:
-  <select id="playerCount" onchange="setupPlayers()">
-    <option value="2">2</option>
-    <option value="3">3</option>
-    <option value="4">4</option>
-  </select>
-</div>
+<h1>🎯 Dart Pro Scorer</h1>
 
 <div id="players" class="players"></div>
 
-<div class="controls">
-  <input id="points" type="number" placeholder="Points" />
-  <select id="multiplier">
-    <option value="1">Single</option>
-    <option value="2">Double</option>
-    <option value="3">Triple</option>
-  </select>
+<div class="inputs">
+  <input id="d1" placeholder="Dart 1">
+  <input id="d2" placeholder="Dart 2">
+  <input id="d3" placeholder="Dart 3">
   <br/>
-  <button onclick="addScore()">Submit (Enter)</button>
-  <button onclick="resetGame()">Reset</button>
+  <label>Last dart was double <input type="checkbox" id="doubleCheck"></label>
+  <br/>
+  <button onclick="submitTurn()">Submit (Enter)</button>
+  <button onclick="undo()">Undo</button>
 </div>
 
-<script>
-let players = [];
-let currentPlayer = 0;
+<div class="keypad" id="keypad"></div>
 
-function setupPlayers() {
-  const count = parseInt(document.getElementById('playerCount').value);
-  players = [];
-  for (let i = 0; i < count; i++) {
-    players.push({ score: 501, darts: 0 });
-  }
-  currentPlayer = 0;
-  render();
+<script>
+let players = [createPlayer(), createPlayer()];
+let currentPlayer = 0;
+let history = [];
+
+function createPlayer(){
+  return {score:501,darts:0,legs:0,sets:0};
 }
 
-function render() {
-  const container = document.getElementById('players');
-  container.innerHTML = '';
-  players.forEach((p, i) => {
-    container.innerHTML += `
-      <div class="player ${i===currentPlayer?'active':''}">
-        <h3>Player ${i+1}</h3>
-        <div class="score">${p.score}</div>
-        <div>Avg: ${p.darts ? ((501 - p.score) / p.darts).toFixed(2) : 0}</div>
-      </div>
-    `;
+function render(){
+  const container=document.getElementById('players');
+  container.innerHTML='';
+  players.forEach((p,i)=>{
+    container.innerHTML+=`
+    <div class="player ${i===currentPlayer?'active':''}">
+      <h3>Player ${i+1}</h3>
+      <div class="score">${p.score}</div>
+      <div class="small">Legs: ${p.legs} | Sets: ${p.sets}</div>
+      <div class="small">Avg: ${p.darts?((501-p.score)/p.darts).toFixed(2):0}</div>
+    </div>`;
   });
 }
 
-function addScore() {
-  const val = parseInt(document.getElementById('points').value);
-  const mult = parseInt(document.getElementById('multiplier').value);
-  if (isNaN(val)) return;
+function submitTurn(){
+  let v1=+d1El.value||0;
+  let v2=+d2El.value||0;
+  let v3=+d3El.value||0;
 
-  let player = players[currentPlayer];
-  let throwScore = val * mult;
-  let newScore = player.score - throwScore;
+  let total=v1+v2+v3;
+  let player=players[currentPlayer];
 
-  if (newScore < 0 || newScore === 1) {
-    nextPlayer();
+  history.push(JSON.parse(JSON.stringify(players)));
+
+  let newScore=player.score-total;
+
+  if(newScore<0 || newScore===1){ next(); clearInputs(); return; }
+
+  if(newScore===0){
+    if(!doubleCheck.checked){ next(); clearInputs(); return; }
+
+    player.score=0;
+    player.legs++;
+    player.darts+=3;
+
+    if(player.legs>=3){
+      player.sets++;
+      player.legs=0;
+      alert(`Player ${currentPlayer+1} wins SET!`);
+    } else {
+      alert(`Player ${currentPlayer+1} wins LEG!`);
+    }
+
+    resetLeg();
     return;
   }
 
-  if (newScore === 0 && mult !== 2) {
-    nextPlayer();
-    return;
-  }
+  player.score=newScore;
+  player.darts+=3;
 
-  player.score = newScore;
-  player.darts++;
-
-  if (newScore === 0) {
-    alert(`Player ${currentPlayer+1} wins!`);
-  }
-
-  document.getElementById('points').value = '';
-  nextPlayer();
+  clearInputs();
+  next();
 }
 
-function nextPlayer() {
-  currentPlayer = (currentPlayer + 1) % players.length;
+function resetLeg(){
+  players.forEach(p=>p.score=501);
+  clearInputs();
   render();
 }
 
-function resetGame() {
-  setupPlayers();
+function undo(){
+  if(history.length>0){
+    players=history.pop();
+    currentPlayer=(currentPlayer-1+players.length)%players.length;
+    render();
+  }
 }
 
-// ENTER key support
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') {
-    addScore();
-  }
+function next(){
+  currentPlayer=(currentPlayer+1)%players.length;
+  render();
+}
+
+function clearInputs(){
+  d1El.value=''; d2El.value=''; d3El.value='';
+  doubleCheck.checked=false;
+}
+
+// keypad
+const keypad=document.getElementById('keypad');
+[1,5,20,25,50,60].forEach(v=>{
+  let btn=document.createElement('button');
+  btn.innerText=v;
+  btn.onclick=()=>fillInput(v);
+  keypad.appendChild(btn);
 });
 
-setupPlayers();
+function fillInput(val){
+  if(!d1El.value) d1El.value=val;
+  else if(!d2El.value) d2El.value=val;
+  else d3El.value=val;
+}
+
+// enter
+const d1El=document.getElementById('d1');
+const d2El=document.getElementById('d2');
+const d3El=document.getElementById('d3');
+const doubleCheck=document.getElementById('doubleCheck');
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter') submitTurn();
+});
+
+render();
 </script>
 
 </body>
