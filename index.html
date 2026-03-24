@@ -3,174 +3,184 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dart Pro Scorer</title>
+<title>Dart Pro P2P</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 body { font-family: Arial; text-align:center; background:#0f172a; color:#fff; }
-h1 { margin:20px; }
-.players { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; }
-.player { background:#1e293b; padding:20px; border-radius:20px; width:220px; }
+.player { background:#1e293b; margin:10px; padding:15px; border-radius:15px; }
 .active { border:3px solid #22c55e; }
-.score { font-size:70px; font-weight:bold; }
-.small { font-size:14px; opacity:0.8; }
-.inputs { margin-top:20px; }
-input { width:70px; padding:10px; font-size:18px; margin:5px; text-align:center; border-radius:10px; border:none; }
-button { padding:10px; margin:4px; border:none; border-radius:10px; background:#22c55e; font-weight:bold; cursor:pointer; }
-.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:360px; margin:10px auto; }
+.score { font-size:60px; }
+button { padding:10px; margin:5px; border-radius:10px; }
+.keypad { display:flex; flex-wrap:wrap; justify-content:center; max-width:360px; margin:auto; }
 .keypad button { width:60px; }
 </style>
 </head>
 <body>
 
-<h1>🎯 Dart Pro Scorer</h1>
+<h1>🎯 Dart Pro P2P</h1>
 
-<div id="players" class="players"></div>
+<div>
+<button onclick="createGame()">Create Game</button>
+<input id="joinId" placeholder="Enter code">
+<button onclick="joinGame()">Join</button>
+</div>
 
-<div class="inputs">
+<h3 id="myId"></h3>
+
+<div id="game" style="display:none">
+  <h2 id="turn"></h2>
+  <div id="players"></div>
+
   <input id="d1" placeholder="D1">
   <input id="d2" placeholder="D2">
   <input id="d3" placeholder="D3">
   <br/>
-  <button onclick="setMultiplier(1)">Single</button>
-  <button onclick="setMultiplier(2)">Double</button>
-  <button onclick="setMultiplier(3)">Triple</button>
+  <button onclick="setMult(1)">S</button>
+  <button onclick="setMult(2)">D</button>
+  <button onclick="setMult(3)">T</button>
   <br/>
   <label>Last dart double <input type="checkbox" id="doubleCheck"></label>
   <br/>
   <button onclick="submitTurn()">Submit</button>
-  <button onclick="undo()">Undo</button>
 </div>
 
 <div class="keypad" id="keypad"></div>
 
 <script>
-let players = [createPlayer(), createPlayer()];
-let currentPlayer = 0;
-let history = [];
+let peer = new Peer();
+let conn;
+let isHost = false;
 let multiplier = 1;
 
+let gameState = {
+  players:[createPlayer(),createPlayer()],
+  turn:0
+};
+
 function createPlayer(){
-  return {score:501,darts:0,total:0,legs:0,sets:0};
+  return {score:501,total:0,darts:0,legs:0,sets:0};
 }
 
-function render(){
-  const container=document.getElementById('players');
-  container.innerHTML='';
-  players.forEach((p,i)=>{
-    let avg = p.darts ? ((p.total / p.darts) * 3).toFixed(2) : 0;
-    container.innerHTML+=`
-    <div class="player ${i===currentPlayer?'active':''}">
-      <h3>Player ${i+1}</h3>
-      <div class="score">${p.score}</div>
-      <div class="small">Legs: ${p.legs} | Sets: ${p.sets}</div>
-      <div class="small">3-dart Avg: ${avg}</div>
-    </div>`;
+peer.on('open', id => {
+  document.getElementById('myId').innerText = "Your code: " + id;
+});
+
+function createGame(){
+  isHost = true;
+  document.getElementById('game').style.display='block';
+}
+
+function joinGame(){
+  const id = document.getElementById('joinId').value;
+  conn = peer.connect(id);
+
+  conn.on('open', ()=>{
+    document.getElementById('game').style.display='block';
+  });
+
+  conn.on('data', data=>{
+    gameState = data;
+    render();
   });
 }
 
-function setMultiplier(m){ multiplier = m; }
+peer.on('connection', c => {
+  conn = c;
+  conn.on('data', data=>{
+    gameState = data;
+    render();
+  });
+});
 
-function fillInput(val){
-  val = val * multiplier;
-  multiplier = 1;
+function sendState(){
+  if(conn) conn.send(gameState);
+}
 
-  if(!d1El.value) d1El.value=val;
-  else if(!d2El.value) d2El.value=val;
-  else d3El.value=val;
+function render(){
+  document.getElementById('turn').innerText = 'Player ' + (gameState.turn+1);
+
+  let html='';
+  gameState.players.forEach((p,i)=>{
+    let avg = p.darts ? ((p.total/p.darts)*3).toFixed(2) : 0;
+    html+=`<div class="player ${i===gameState.turn?'active':''}">
+      <h3>P${i+1}</h3>
+      <div class="score">${p.score}</div>
+      <div>Legs:${p.legs} Sets:${p.sets}</div>
+      <div>Avg:${avg}</div>
+    </div>`;
+  });
+  document.getElementById('players').innerHTML = html;
+}
+
+function setMult(m){ multiplier=m; }
+
+function fill(val){
+  val*=multiplier;
+  multiplier=1;
+  if(!d1.value) d1.value=val;
+  else if(!d2.value) d2.value=val;
+  else d3.value=val;
 }
 
 function submitTurn(){
-  let v1=+d1El.value||0;
-  let v2=+d2El.value||0;
-  let v3=+d3El.value||0;
+  let v1=+d1.value||0;
+  let v2=+d2.value||0;
+  let v3=+d3.value||0;
 
+  let p=gameState.players[gameState.turn];
   let total=v1+v2+v3;
-  let player=players[currentPlayer];
+  let newScore=p.score-total;
 
-  history.push(JSON.parse(JSON.stringify(players)));
-
-  let newScore=player.score-total;
-
-  if(newScore<0 || newScore===1){ next(); clearInputs(); return; }
-
-  if(newScore===0){
-    if(!doubleCheck.checked){ next(); clearInputs(); return; }
-
-    player.score=0;
-    player.legs++;
-    player.darts+=3;
-    player.total+=total;
-
-    if(player.legs>=3){
-      player.sets++;
-      player.legs=0;
-      alert(`Player ${currentPlayer+1} wins SET!`);
-    } else {
-      alert(`Player ${currentPlayer+1} wins LEG!`);
-    }
-
-    resetLeg();
+  if(newScore<0 || newScore===1){
+    gameState.turn=(gameState.turn+1)%2;
+    update();
     return;
   }
 
-  player.score=newScore;
-  player.darts+=3;
-  player.total+=total;
+  if(newScore===0){
+    if(!doubleCheck.checked) return;
 
-  clearInputs();
-  next();
-}
+    p.legs++;
+    if(p.legs>=3){ p.sets++; p.legs=0; }
 
-function resetLeg(){
-  players.forEach(p=>p.score=501);
-  clearInputs();
-  render();
-}
-
-function undo(){
-  if(history.length>0){
-    players=history.pop();
-    currentPlayer=(currentPlayer-1+players.length)%players.length;
-    render();
+    gameState.players.forEach(pl=>pl.score=501);
+    update();
+    return;
   }
+
+  p.score=newScore;
+  p.total+=total;
+  p.darts+=3;
+
+  gameState.turn=(gameState.turn+1)%2;
+
+  update();
 }
 
-function next(){
-  currentPlayer=(currentPlayer+1)%players.length;
-  render();
-}
-
-function clearInputs(){
-  d1El.value=''; d2El.value=''; d3El.value='';
+function update(){
+  d1.value=''; d2.value=''; d3.value='';
   doubleCheck.checked=false;
+  render();
+  sendState();
 }
 
-// keypad full 1-20 + bull
-const keypad=document.getElementById('keypad');
 for(let i=1;i<=20;i++){
-  let btn=document.createElement('button');
-  btn.innerText=i;
-  btn.onclick=()=>fillInput(i);
-  keypad.appendChild(btn);
+  let b=document.createElement('button');
+  b.innerText=i;
+  b.onclick=()=>fill(i);
+  keypad.appendChild(b);
 }
 
 [25,50].forEach(v=>{
-  let btn=document.createElement('button');
-  btn.innerText=v;
-  btn.onclick=()=>fillInput(v);
-  keypad.appendChild(btn);
+  let b=document.createElement('button');
+  b.innerText=v;
+  b.onclick=()=>fill(v);
+  keypad.appendChild(b);
 });
 
-const d1El=document.getElementById('d1');
-const d2El=document.getElementById('d2');
-const d3El=document.getElementById('d3');
-const doubleCheck=document.getElementById('doubleCheck');
-
-// enter support
-document.addEventListener('keydown',e=>{
+window.addEventListener('keydown',e=>{
   if(e.key==='Enter') submitTurn();
 });
-
-render();
 </script>
 
 </body>
